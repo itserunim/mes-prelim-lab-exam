@@ -129,7 +129,7 @@ function DemoPanel({ status, onArm, onDisarm, mqttConnected }) {
       <div className="mb-4 flex items-center justify-center gap-2 text-xs">
         <span className={`h-2 w-2 rounded-full ${mqttConnected ? "bg-success animate-pulse" : "bg-danger"}`} />
         <span className={mqttConnected ? "text-success font-medium" : "text-danger font-medium"}>
-          MQTT {mqttConnected ? "Connected" : "Disconnected - Check console (F12)"}
+          MQTT {mqttConnected ? "Connected" : "Disconnected"}
         </span>
       </div>
 
@@ -166,9 +166,9 @@ function DemoPanel({ status, onArm, onDisarm, mqttConnected }) {
       </div>
       
       <p className="mt-4 text-center text-xs text-muted">
-        {status === "idle" && "Real-time sync with Arduino. Click ARM to enable monitoring."}
-        {status === "armed" && "🔴 Live: Arduino monitoring for movement..."}
-        {status === "alert" && "🚨 Real-time alert from device! Click DISARM to reset."}
+        {status === "idle" && "Click 'ARM Device' to enable monitoring."}
+        {status === "armed" && "Monitoring for movement..."}
+        {status === "alert" && "Click 'DISARM Device' to reset."}
       </p>
     </div>
   );
