@@ -229,14 +229,14 @@ export default function Home() {
         <div className="absolute inset-0 bg-gradient-to-b from-accent/5 to-transparent" />
         <div className="relative mx-auto max-w-3xl text-center">
           <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-accent/30 bg-accent/10 px-4 py-1.5 text-xs font-semibold uppercase tracking-wider text-accent">
-            <LockIcon className="h-3.5 w-3.5" /> Lab Exam Project
+            <LockIcon className="h-3.5 w-3.5" /> SentriBag
           </div>
           <h1 className="animate-slide-up text-3xl font-bold leading-tight tracking-tight text-foreground sm:text-5xl">
             Wireless Battery-Powered{" "}
             <span className="text-accent">Anti-Theft</span> Bag Alarm
           </h1>
           <p className="mx-auto mt-4 max-w-xl animate-slide-up stagger-1 text-sm leading-relaxed text-muted sm:text-base">
-            A compact, embedded device that detects unauthorized bag movement or
+            A compact, mobile embedded device that detects unauthorized bag movement or
             opening, triggers a local alarm, and sends a wireless alert to your
             phone — all while running on battery power.
           </p>
@@ -281,10 +281,10 @@ export default function Home() {
         <SectionCard icon={CpuIcon} title="Implementation" delay={3}>
           <div className="grid gap-4 sm:grid-cols-2">
             {[
-              { icon: ActivityIcon, label: "Sensor", desc: "Tilt switch, accelerometer, PIR, or magnetic reed switch" },
+              { icon: ActivityIcon, label: "Sensor", desc: "HW-246/GY-271 (Magnetometer/Compass)" },
               { icon: WifiIcon, label: "Wireless", desc: "Bluetooth, Wi-Fi, or RF module for alert transmission" },
-              { icon: CpuIcon, label: "Processor", desc: "Any MCU, MPU, or SoC (e.g., ESP32, Arduino, STM32)" },
-              { icon: VolumeIcon, label: "Local Alert", desc: "Buzzer, LED indicator, or vibration motor output" },
+              { icon: CpuIcon, label: "Processor", desc: "ESP32-C3, a cost-effective and compact microcontroller" },
+              { icon: VolumeIcon, label: "Local Alert", desc: "Buzzer and LED indicator" },
               { icon: BatteryIcon, label: "Power", desc: "Battery-powered for portability and demo use" },
               { icon: LockIcon, label: "Form Factor", desc: "Small enough to attach to or place inside a bag" },
             ].map(({ icon: I, label, desc }) => (
