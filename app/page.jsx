@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { connectMQTT, disconnectMQTT, publishArm, publishDisarm } from "./lib/mqttClient";
 
 /* ─── Icon Components ─── */
 const ShieldIcon = ({ className }) => (
@@ -119,10 +120,19 @@ function StatusBadge({ status }) {
 }
 
 /* ─── Demo Simulation Panel ─── */
-function DemoPanel({ status, onArm, onTrigger, onReset }) {
+function DemoPanel({ status, onArm, onDisarm, mqttConnected }) {
   return (
     <div className="rounded-2xl border border-card-border bg-card p-6">
-      <h3 className="mb-4 text-lg font-semibold text-foreground">Live Demo Simulation</h3>
+      <h3 className="mb-4 text-lg font-semibold text-foreground">Real-Time Device Status</h3>
+      
+      {/* MQTT Connection Status */}
+      <div className="mb-4 flex items-center justify-center gap-2 text-xs">
+        <span className={`h-2 w-2 rounded-full ${mqttConnected ? "bg-success animate-pulse" : "bg-danger"}`} />
+        <span className={mqttConnected ? "text-success font-medium" : "text-danger font-medium"}>
+          MQTT {mqttConnected ? "Connected" : "Disconnected - Check console (F12)"}
+        </span>
+      </div>
+
       <div className="mb-5 flex items-center justify-center">
         <div className="relative">
           <div className={`flex h-28 w-28 items-center justify-center rounded-full ${status === "alert" ? "bg-danger/20" : status === "armed" ? "bg-success/20" : "bg-zinc-800"}`}>
@@ -132,23 +142,34 @@ function DemoPanel({ status, onArm, onTrigger, onReset }) {
         </div>
       </div>
       <div className="mb-5 flex justify-center"><StatusBadge status={status} /></div>
+      
+      {/* ARM/DISARM Controls */}
       <div className="flex flex-col gap-3 sm:flex-row sm:justify-center">
         {status === "idle" && (
-          <button onClick={onArm} className="w-full rounded-xl bg-success/90 px-6 py-3 text-sm font-semibold text-black transition-all hover:bg-success active:scale-95 sm:w-auto">
-            Arm Device
+          <button 
+            onClick={onArm} 
+            disabled={!mqttConnected}
+            className="w-full rounded-xl bg-success/90 px-6 py-3 text-sm font-semibold text-black transition-all hover:bg-success active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed sm:w-auto"
+          >
+            ARM Device
           </button>
         )}
-        {status === "armed" && (
-          <button onClick={onTrigger} className="w-full rounded-xl bg-danger/90 px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-danger active:scale-95 sm:w-auto">
-            Simulate Theft
-          </button>
-        )}
-        {status === "alert" && (
-          <button onClick={onReset} className="w-full rounded-xl bg-zinc-700 px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-zinc-600 active:scale-95 sm:w-auto">
-            Reset Device
+        {(status === "armed" || status === "alert") && (
+          <button 
+            onClick={onDisarm} 
+            disabled={!mqttConnected}
+            className="w-full rounded-xl bg-warning/90 px-6 py-3 text-sm font-semibold text-black transition-all hover:bg-warning active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed sm:w-auto"
+          >
+            DISARM Device
           </button>
         )}
       </div>
+      
+      <p className="mt-4 text-center text-xs text-muted">
+        {status === "idle" && "Real-time sync with Arduino. Click ARM to enable monitoring."}
+        {status === "armed" && "🔴 Live: Arduino monitoring for movement..."}
+        {status === "alert" && "🚨 Real-time alert from device! Click DISARM to reset."}
+      </p>
     </div>
   );
 }
@@ -197,27 +218,105 @@ function DemoStep({ number, title, desc }) {
 export default function Home() {
   const [status, setStatus] = useState("idle");
   const [toast, setToast] = useState(null);
+  const [mqttConnected, setMqttConnected] = useState(false);
+  const [isInitialLoad, setIsInitialLoad] = useState(true);
+  const mqttInitialized = useRef(false); // Track if MQTT is already set up
 
   const notify = useCallback((message, type = "success") => {
     setToast({ message, type, key: Date.now() });
   }, []);
 
-  const handleArm = () => {
-    setStatus("armed");
-    notify("Device armed — monitoring for movement.", "success");
-  };
+  // ─── MQTT Arduino Integration ───
 
-  const handleTrigger = () => {
+  // Handle status updates from Arduino (IDLE, ARMED, CALIBRATED, ONLINE)
+  const handleStatusUpdate = useCallback((statusMsg) => {
+    
+    // Map Arduino status to UI state in real-time
+    const statusMap = {
+      "IDLE": "idle",
+      "ARMED": "armed",
+      "CALIBRATED": "idle",
+      "ONLINE": "idle"
+    };
+    
+    const newStatus = statusMap[statusMsg];
+    if (newStatus) {
+      setStatus(newStatus);
+    }
+    
+    // Show notifications for specific states (skip first IDLE on page load)
+    if (statusMsg === "CALIBRATED") {
+      notify("Arduino calibration complete.", "success");
+    } else if (statusMsg === "ONLINE") {
+      notify("Arduino device online.", "success");
+      setIsInitialLoad(true); // Mark as initial load
+    } else if (statusMsg === "ARMED") {
+      notify("Device ARMED — Arduino monitoring enabled.", "success");
+      setIsInitialLoad(false);
+    } else if (statusMsg === "IDLE") {
+      if (!isInitialLoad) {
+        notify("Device returned to IDLE state.", "warning");
+      } else {
+        setIsInitialLoad(false);
+      }
+    }
+  }, [notify, isInitialLoad]);
+
+  // Handle theft detection from Arduino
+  const handleTheftDetected = useCallback(() => {
     setStatus("alert");
-    notify("THEFT DETECTED! Wireless alert sent.", "alert");
+    notify("🚨 THEFT DETECTED! Alert from Arduino device.", "alert");
     if (typeof navigator !== "undefined" && navigator.vibrate) {
       navigator.vibrate([200, 100, 200, 100, 200]);
     }
+  }, [notify]);
+
+  // Connect to MQTT on mount
+  useEffect(() => {
+    if (mqttInitialized.current) {
+      return;
+    }
+    
+    mqttInitialized.current = true;
+
+    connectMQTT(
+      handleStatusUpdate,
+      handleTheftDetected,
+      () => {
+        setMqttConnected(true);
+        notify("Connected to MQTT!", "success");
+      },
+      () => setMqttConnected(false)
+    );
+
+    // Only cleanup on actual unmount (page close)
+    return () => {
+      mqttInitialized.current = false;
+      disconnectMQTT();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run only once on mount
+
+  // Handle page unload/reload separately
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      disconnectMQTT(); // Sends DISARM before disconnecting
+    };
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, []);
+
+  // ARM device - sends command to Arduino (state will update when Arduino responds)
+  const handleArm = () => {
+    publishArm();
+    notify("Sending ARM command to Arduino...", "success");
   };
 
-  const handleReset = () => {
-    setStatus("idle");
-    notify("Device reset to idle state.", "warning");
+  // DISARM device - sends command to Arduino (state will update when Arduino responds)
+  const handleDisarm = () => {
+    publishDisarm();
+    notify("Sending DISARM command to Arduino...", "warning");
   };
 
   return (
@@ -250,8 +349,8 @@ export default function Home() {
         <DemoPanel
           status={status}
           onArm={handleArm}
-          onTrigger={handleTrigger}
-          onReset={handleReset}
+          onDisarm={handleDisarm}
+          mqttConnected={mqttConnected}
         />
 
         {/* Purpose */}
